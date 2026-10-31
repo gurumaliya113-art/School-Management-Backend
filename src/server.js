@@ -88,4 +88,15 @@ const PORT = Number(process.env.PORT || 4000);
   await migrate();
   await auth.ensureAdmin();
   app.listen(PORT, () => console.log(`School Management API running on port ${PORT}`));
-})().catch((e) => { console.error('Startup failed:', e.message); process.exit(1); });
+})().catch((e) => {
+  const m = String(e.message || e);
+  let hint = '';
+  if (/password authentication failed/i.test(m)) hint = 'Wrong database password in DATABASE_URL. Reset it in Supabase → Project Settings → Database and update DATABASE_URL.';
+  else if (/Tenant or user not found/i.test(m)) hint = 'Pooler username must be "postgres.<project-ref>" — copy the full Session pooler string from Supabase → Connect.';
+  else if (/ENOTFOUND|EAI_AGAIN/i.test(m)) hint = 'Database host not found. Check DATABASE_URL host spelling.';
+  else if (/ENETUNREACH|EHOSTUNREACH|ETIMEDOUT|timeout/i.test(m)) hint = 'Cannot reach database. Use the Supabase "Session pooler" string (IPv4), not "Direct connection". Also check the Supabase project is not paused.';
+  else if (/certificate/i.test(m)) hint = 'SSL problem. Remove DB_SSL_CA or check it is the correct Supabase CA.';
+  console.error('Startup failed:', m);
+  if (hint) console.error('FIX:', hint);
+  process.exit(1);
+});

@@ -7,19 +7,43 @@ types.setTypeParser(1700, (v) => (v === null ? null : parseFloat(v)));
 types.setTypeParser(20, (v) => (v === null ? null : parseInt(v, 10)));
 types.setTypeParser(1082, (v) => v);
 
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL is not set. Copy backend/.env.example to backend/.env and fill it in.');
-  process.exit(1);
+// Build the connection config ourselves. If the URL has ?sslmode=..., the pg library would
+// override our SSL settings and Supabase connections fail with "self-signed certificate".
+function dbConfig() {
+  const raw = (process.env.DATABASE_URL || '').trim().replace(/^["']|["']$/g, '');
+  if (!raw) {
+    console.error('DATABASE_URL is not set. Add it in Render/Railway → Environment (Supabase → Connect → Session pooler).');
+    process.exit(1);
+  }
+  if (/\[YOUR-PASSWORD\]|\[|\]/.test(raw)) {
+    console.error('DATABASE_URL still contains [YOUR-PASSWORD] or brackets. Put your real Supabase database password in it (without [ ]).');
+    process.exit(1);
+  }
+  let u;
+  try { u = new URL(raw); } catch {
+    console.error('DATABASE_URL is not a valid URL. If your password has special characters like @ # / ? %, reset the Supabase DB password to letters+numbers only, or URL-encode it.');
+    process.exit(1);
+  }
+  if (/^db\.[a-z0-9]+\.supabase\.co$/i.test(u.hostname)) {
+    console.warn('WARNING: You are using the Supabase "Direct connection" host (IPv6 only). Render/Railway may not reach it. Use the "Session pooler" string (…pooler.supabase.com).');
+  }
+  const ssl = process.env.DB_SSL === 'false' ? false
+    : process.env.DB_SSL_CA ? { ca: process.env.DB_SSL_CA.replace(/\\n/g, '\n') }
+      : { rejectUnauthorized: false };
+  return {
+    host: u.hostname,
+    port: Number(u.port || 5432),
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    database: decodeURIComponent(u.pathname.replace(/^\//, '') || 'postgres'),
+    ssl,
+    max: Number(process.env.DB_POOL_MAX || 5),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 15000,
+  };
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'false' ? false
-    : process.env.DB_SSL_CA ? { ca: process.env.DB_SSL_CA.replace(/\\n/g, '\n') }
-      : { rejectUnauthorized: false },
-  max: Number(process.env.DB_POOL_MAX || 5),
-  idleTimeoutMillis: 30000,
-});
+const pool = new Pool(dbConfig());
 pool.on('error', (e) => console.error('PG pool error', e.message));
 
 const q = (text, params) => pool.query(text, params);
