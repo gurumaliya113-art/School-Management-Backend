@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: school-management-api
+    runtime: node
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_FRONTEND
+        value: "false"
+      - key: TZ_NAME
+        value: Asia/Kolkata
+      - key: DATABASE_URL
+        sync: false
+      - key: FEE_HMAC_SECRET
+        sync: false
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
